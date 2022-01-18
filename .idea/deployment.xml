@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="PublishConfigData" autoUpload="Always" serverName="nus" filePermissions="420" folderPermissions="493" remoteFilesAllowedToDisappearOnAutoupload="false" autoUploadExternalChanges="true">
+    <serverData>
+      <paths name="nus">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/TJU_GongGA/heteroga" local="$PROJECT_DIR$" web="/" />
+          </mappings>
+          <excludedPaths>
+            <excludedPath path="/TJU_GongGA/heteroga/example/.ipynb_checkpoints" />
+            <excludedPath path="/TJU_GongGA/heteroga/example/Cluster0" />
+            <excludedPath path="/TJU_GongGA/heteroga/example/Cluster1" />
+            <excludedPath path="/TJU_GongGA/heteroga/example/Cluster2" />
+            <excludedPath path="/TJU_GongGA/heteroga/.ipynb_checkpoints" />
+            <excludedPath path="/TJU_GongGA/heteroga/Untitled.ipynb" />
+          </excludedPaths>
+        </serverdata>
+      </paths>
+    </serverData>
+    <option name="myAutoUpload" value="ALWAYS" />
+  </component>
+</project>

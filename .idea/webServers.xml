@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="WebServers">
+    <option name="servers">
+      <webServer id="745d1123-ef6f-4bc5-85ba-83cee2231a0f" name="nus">
+        <fileTransfer rootFolder="/hpctmp/e0444250" accessType="SFTP" host="atlas8.nus.edu.sg" port="22" sshConfigId="c255df40-6b2e-4159-91a1-2bf070c032af" sshConfig="e0444250@atlas8.nus.edu.sg:22 password">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" passiveMode="true" shareSSLContext="true" />
+          </advancedOptions>
+        </fileTransfer>
+      </webServer>
+    </option>
+  </component>
+</project>

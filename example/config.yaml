@@ -1,0 +1,23 @@
+# Parameter setting
+
+top_num_atom_for_optima: 7
+num_gen: 80
+stru_file: POSCAR
+
+supercell_set: 2, 2, 1
+initial_ratio: 2
+delete_num: 0
+
+num_cluster: 3
+num_pop: 15
+num_fit: 30
+mutate_rate: 100
+logfile: search.log
+
+calc: Lasp
+
+initial_mode: total_random
+height_ratio: 1.8
+
+sampling_method: GPR
+sampling_ratio: 3

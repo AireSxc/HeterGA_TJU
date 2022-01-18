@@ -1,0 +1,32 @@
+potential NN
+explore_type ssw
+Ewaldflag    0
+%block netinfo
+  Pt  PtO.pot
+  O  PtO.pot
+%endblock netinfo
+PrintChg 0
+
+Run_type  5    #    5  for SSW with fixed cell
+
+SSW.SSWsteps  1     # 0 single point
+                    # 1 stru opt
+
+                    # > 1  SSW global opt
+
+
+#  for SSW search  start
+SSW.Temp   300
+SSW.DimerdR 0.01
+SSW.ds_atom 0.6
+SSW.NG            10
+SSW.inirot   1
+SSW.ftol         0.1
+iSSW.Ratio_Local       15
+
+# output
+SSW.output T 
+SSW.printevery T
+
+
+
