@@ -78,5 +78,7 @@ class ReadSetandCalc:
         else:
             self.mutate_rate = conf['mutate_rate']
 
+        self.num_pop = conf['num_pop']
+
     def follow_initial(self):
-        self.slab = ase.io.read(os.path.join(home_path, 'Cluster0', 'Gen0', '0', 'CONTCAR'))
+        self.slab = ase.io.read(os.path.join(self.home_path, 'Cluster0', 'Gen0', '0', 'CONTCAR'))

@@ -25,7 +25,7 @@ Uncertainty-guided multi-population mixed evolutionary algorithm for the global 
 Features
 --------
 
-* TODO: Many thing to do & Hope have enough time
+* TODO: Many thing to do & GO GO GO!
 
 Credits
 -------

@@ -1,7 +1,5 @@
 import sys
 
-import yaml
-
 sys.path.append('/hpctmp/e0444250/TJU_GongGA/heteroga/heteroga')
 
 from setting import ReadSetandCalc

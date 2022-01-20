@@ -65,6 +65,7 @@ class LogGenerator:
 
     def each_cluster_logfile(self, gen, path_clu, return_atom_energy_list=False, return_file_list=False):
         """
+        The GAlog.txt contain the 0 structure that is transferred from other cluster.
 
         Args:
             gen:
