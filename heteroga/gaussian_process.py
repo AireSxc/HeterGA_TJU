@@ -8,10 +8,11 @@ import sklearn
 import numpy as np
 from scipy import stats
 from dscribe.descriptors import SOAP
-from sklearn.gaussian_process.kernels import RBF, Matern
+from sklearn.gaussian_process.kernels import Matern
 from sklearn.gaussian_process import GaussianProcessRegressor
 
 from prior.prior import RepulsivePrior
+
 
 class MLMemory:
     def __init__(self, descriptor=None, prior=None):
@@ -33,11 +34,10 @@ class MLMemory:
         self.update_energy(energy_list)
 
         if save_loc is not None:
-            np.savez(os.path.join(save_loc, 'GPR_para.npz'),
+            np.savez(os.path.join(save_loc, 'features_ene_pri.npz'),
                      features=self.features, energies=self.energies, prior_values=self.prior_values)
 
     def update_feature(self, atoms_list):
-        print(len(atoms_list))
         feature_mat = self.descriptor.create(atoms_list, n_jobs=len(atoms_list))  # Parallel
         if self.features is None:
             self.features = np.array(feature_mat)
@@ -119,8 +119,8 @@ class GPR:
         y_samples = rng.multivariate_normal(y_pred, cov, n_samples).T
         posterior_sample = y_samples.T[0]
         prior_list = np.array([self.prior.energy(i) for i in strucutre_list])
-        acquisition_func = posterior_sample + prior_list + self.bias
         e = y_pred + self.bias + prior_list
+        acquisition_func = posterior_sample + prior_list + self.bias
 
         return e, acquisition_func
 
@@ -147,6 +147,6 @@ def gpr_recode(home_path, error_all_list, rmse_list, tau_list, std_list):
     rmse_list.append(rmse)
     tau_list.append(tau)
     std_list.append(np.mean(error_all_list[..., 2]))
-    np.savez(home_path + '/gpr_list.npz', rmse=np.array(rmse_list), tau=np.array(tau_list), std=np.array(std_list))
+    np.savez(os.path.join(home_path, 'gpr_list.npz'), rmse=np.array(rmse_list), tau=np.array(tau_list), std=np.array(std_list))
 
 

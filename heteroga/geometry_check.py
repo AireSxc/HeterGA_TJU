@@ -1,13 +1,50 @@
 #!/usr/bin/env python3.6
 
+import os
 import itertools
 import numpy as np
 
+import ase.io
 from ase.data import covalent_radii
 from scipy.spatial.distance import cdist
 
 from utilities import get_sorted_dist_list, split_based
 
+def log_similarity(file_list, path_clu, conf):
+    drop_list = list()
+    file_list = sorted(file_list, key=(lambda x: x[2]), reverse=True)
+
+    for i in range(len(file_list)):
+        path1 = os.path.join(path_clu, "Gen" + str(int(file_list[i][0])), str(int(file_list[i][1])), "CONTCAR")
+        a1_stru = ase.io.read(path1, format='vasp')[:conf.num_atom]
+        a1 = [a1_stru, file_list[i][2]]
+
+        for j in range(i):
+            path2 = os.path.join(path_clu, "Gen" + str(int(file_list[j][0])), str(int(file_list[j][1])), "CONTCAR")
+            a2_stru = ase.io.read(path2, format='vasp')[:conf.num_atom]
+            a2 = [a2_stru, file_list[j][2]]
+            similarity = looks_like(a1, a2, conf.num_atom)
+
+            if similarity:
+                drop_list.append(j)
+
+    for i in set(drop_list):
+        file_list[i][2] = file_list[i][2] + 10
+
+    return file_list, drop_list
+
+def sampling_similar(new_stru, conf, log_set, now_cluster, pair_cor_cum_diff=0.05):
+    path_cluster = os.path.join(conf.home_path, 'Cluster' + str(now_cluster))
+    list_for_comm = log_set.rank_each_cluster[now_cluster]
+
+    for stru_num in list_for_comm:
+        path = os.path.join(path_cluster, "Gen" + str(int(stru_num[0])), str(int(stru_num[1])), "CONTCAR")
+        a2 = ase.io.read(path, format='vasp')
+        similarity = looks_like([new_stru], [a2], conf.num_atom, pair_cor_cum_diff=pair_cor_cum_diff)
+        if similarity:
+            return True
+
+    return False
 
 def closest_distances_generator(adsorption_atom, atom_numbers, ratio_of_covalent_radii):  # From ASE
     """ Generates the blmin dict used across the GA.
@@ -102,12 +139,13 @@ def cum_diff(a1, a2):
     return total_cum_diff
 
 
-def looks_like(a1, a2, num_atom, delta_de, pair_cor_cum_diff):
+def looks_like(a1, a2, num_atom, delta_de=0.2, pair_cor_cum_diff=0.05, measure_energies=False):
     """ Return if structure a1 or a2 are similar or not. """
+    if measure_energies: # TODO: detect is the input is correct.
     # first we check the energy criteria
-    de = abs(a1[1] - a2[1])
-    if de >= delta_de:
-        return False
+        de = abs(a1[1] - a2[1])
+        if de >= delta_de:
+            return False
 
     # then we check the structure
     total_cum_diff = cum_diff(a1[0][:num_atom], a2[0][:num_atom])

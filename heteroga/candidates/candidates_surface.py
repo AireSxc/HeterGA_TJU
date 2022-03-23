@@ -1,49 +1,42 @@
 import copy
+import json
 import multiprocessing
 import os
 import random
+import shutil
 from abc import ABC
 
 import ase.io
 import numpy as np
+from tqdm import tqdm
 from ase.data import atomic_numbers
-from geometry_check import atoms_too_close, atoms_too_close_two_sets
+
 from log import cal_fitness
 from multitribe import exchange
-from tqdm import tqdm
+from mutation import rattle, permutation
 from utilities import rearrange_order
+from geometry_check import atoms_too_close, atoms_too_close_two_sets, sampling_similar
 
 
 class OffspringOperation(ABC):
     def __init__(self):
         self.gen = 0
 
-    def _calculation_with_error_except(self, stru, log):
-        stru.calc = self.conf.calc
-        if isinstance(self.conf.calc, LaspCalculator):
-            try:
-                stru.get_potential_energy()
-            except ValueError:
-                os.rename("all.arc", "best.arc")
-                stru.calc.read_energy()
-                stru.calc.update_atoms()
-            log.log_msg += f"Structural Calculation Raise Problem at Gen {self.gen} Num {self.gen} \n"
-        return stru
-
     def parallel_frame(self, ope, iter_list, mode='calc', path_gen=None, now_cluster=None):
         # https://blog.csdn.net/qq_34914551/article/details/119451639 #
         pbar = tqdm(total=len(iter_list))
-        pbar.set_description(f'Progress')
         update = lambda *args: pbar.update()
-
         parallel_run = multiprocessing.Pool(processes=multiprocessing.cpu_count())
+
         if mode == 'calc':
+            pbar.set_description(f'Progress for calc')
             multiple_results = [parallel_run.apply_async(ope,
-                                                         args=(item, path_gen),
+                                                         args=(item, path_gen, now_cluster),
                                                          callback=update)
                                 for item in iter_list]
         elif mode == 'sampling':
-            multiple_results = [parallel_run.apply_async(ope(now_cluster), callback=update) for _ in iter_list]
+            pbar.set_description(f'Progress for sampling')
+            multiple_results = [parallel_run.apply_async(ope, args=(now_cluster,), callback=update) for _ in iter_list]
 
         [res.get() for res in multiple_results]
 
@@ -64,7 +57,7 @@ class Initializer(OffspringOperation):
         path_gen = os.path.join(path_cluster, 'Gen0')
 
         iter_list = list(range(self.conf.initial_size))
-        iter_list = restart_cofirm(path_gen, iter_list, self.log)
+        iter_list = restart_confirm(path_gen, iter_list)
 
         os.chdir(path_gen)
         self.parallel_frame(ope, iter_list, path_gen=path_gen)
@@ -132,43 +125,35 @@ class Initializer(OffspringOperation):
 
 
 class FollowingGen(OffspringOperation):
-    def __init__(self, gen, conf, log_set):
+    def __init__(self, gen, conf, log_set, samp):
         OffspringOperation.__init__(self)
         self.gen = gen
 
         self.log = log_set
-        self.log.detect_null_tuple_and_create_log(self.gen)
+        self.log.restart_log(self.gen)
 
         self.conf = conf
         self.conf.follow_initial()
+
+        self.samp = samp
 
         self.candidate_list = multiprocessing.Manager().list()
 
         self.parent_ga_list = multiprocessing.Manager().list()
         self.parent_de_list = multiprocessing.Manager().list()
 
-        # self.mutations = OperationSelector([1., 1.],
-        #                                    [rattle(self.blmin, self.num_atom),
-        #                                     permutation(self.blmin, self.num_atom)])
+        self.for_calc_list = None
 
         self.op_selector = OperationSelector([0.8, 0.2], [self.ga_op, self.de_op])
 
-    # def multi_cluster_following(self, ope):
-    #     for now_cluster in range(self.conf.num_cluster):
-    #         self.log.log_msg += f" - Start Offspring Calculation at Cluster {now_cluster} / Gen {self.gen}\n"
-    #         path_cluster = os.path.join(self.conf.home_path, 'Cluster' + str(now_cluster))
-    #         path_gen = os.path.join(path_cluster, 'Gen' + str(self.gen))
-    #         os.chdir(path_gen)
-    #
-    #         iter_list = list(range(self.conf.num_pop * self.conf.samp_ratio))
-    #         self.parallel_frame(ope, path_gen, now_cluster, iter_list)
+        self.iter_list = list()
 
     def ga_op(self, now_cluster):
         method = 'ga'
-        stru_temp = copy.deepcopy(self.conf.slab)
+        stru_temp = copy.deepcopy(self.conf.stru)
         stru_temp_pos = stru_temp.get_scaled_positions()
 
-        list_for_cross = self.log.gen_loclist_with_cluster[now_cluster]
+        list_for_cross = self.log.rank_each_cluster[now_cluster]
         path_cluster = os.path.join(self.conf.home_path, 'Cluster' + str(now_cluster))
 
         too_close = True
@@ -195,11 +180,14 @@ class FollowingGen(OffspringOperation):
                     too_close = atoms_too_close(stru_temp[:self.conf.num_atom], self.conf.blmin)
 
                     if not too_close:
-                        # if random.randrange(0, 100) < self.conf.mutate_rate:
-                        #     stru_temp = self.mutations.get_structure(stru_temp)
-                        #     method = 'ga_with_mutate'
+                        if random.randrange(0, 100) < self.conf.mutate_rate:
+                            stru_mutate = random.choice([rattle(stru_temp, self.conf.blmin, self.conf.num_atom),
+                                                         permutation(stru_temp, self.conf.blmin, self.conf.num_atom)])
+                            if stru_mutate is not None:
+                                stru_temp = stru_mutate
+                                method = 'ga_with_' + str(stru_temp.mutate_info)
 
-                        stru_temp.label = {'Parent': parent, 'Method': method}
+                        stru_temp.info.update({'Parent': parent, 'Method': method})
                         return stru_temp
 
     def de_op(self, now_cluster):
@@ -218,24 +206,76 @@ class FollowingGen(OffspringOperation):
                 if not atoms_too_close_two_sets(stru_temp[:self.conf.num_atom], stru_temp[self.conf.num_atom:],
                                                 self.conf.blmin):
                     if not atoms_too_close(stru_temp, self.conf.blmin):
-                        stru_temp.label = {'Parent': parent, 'Method': method}
+                        stru_temp.info.update({'Parent': parent, 'Method': method})
                         return stru_temp
 
-    def random_ope_sampling(self, now_cluster):
+    def random_ope_sampling(self, now_cluster, output_single_structure=False):
         accept = False
         while accept is False:
-            op, index = self.op_selector.get_operator()
+            op = self.op_selector.get_operator()
             new_stru = op(now_cluster)
+
             if new_stru is not None:
-                if 'ga' in new_stru.label['Method']:
-                    self.parent_ga_list.append(new_stru.label['Parent'])
-                elif 'de' in new_stru.label['Method']:
-                    self.parent_de_list.append(new_stru.label['Parent'])
+                if not sampling_similar(new_stru, self.conf, self.log, now_cluster):
+                    if 'ga' in new_stru.info['Method']:
+                        self.parent_ga_list.append(new_stru.info['Parent'])
+                    elif 'de' in new_stru.info['Method']:
+                        self.parent_de_list.append(new_stru.info['Parent'])
 
                 accept = True
-                print(new_stru.label['Method'])
-                print(new_stru.label['Parent'])
-                self.candidate_list.append(new_stru)
+
+        if output_single_structure is True:
+            return new_stru
+        else:
+            self.candidate_list.append(new_stru)
+
+    def offspring_mode(self, ope, now_cluster):
+        assert len(self.iter_list) == len(self.for_calc_list)
+        path_cluster = os.path.join(self.conf.home_path, 'Cluster' + str(now_cluster))
+        path_gen = os.path.join(path_cluster, f'Gen{self.gen}')
+
+        os.chdir(path_gen)
+        self.parallel_frame(ope, self.iter_list, path_gen=path_gen, now_cluster=now_cluster)
+
+    def parallel_offspring(self, item, path_gen, now_cluster):
+        subpath = os.path.join(path_gen, str(item))
+        if not os.path.exists(str(subpath)):
+            os.mkdir(str(subpath))
+
+        os.chdir(subpath)
+
+        stru = self.for_calc_list[self.iter_list.index(item)]
+        stru.calc = self.conf.calc
+
+        try:
+            stru.get_potential_energy()
+        except ValueError:
+            self.for_calc_list[self.iter_list.index(item)] = self.random_ope_sampling(now_cluster,
+                                                                                      output_single_structure=True)
+            shutil.rmtree(subpath)
+
+        stru.info.update({'Calculated_Env': stru.calc.results['energy']})
+
+        self.record_stru_info(stru, now_cluster)
+
+        ase.io.write("CONTCAR", stru, format='vasp')
+        ase.io.write(f"output_{self.gen}_" + str(item) + '.cif', stru)
+        os.system(f"echo {self.gen} " + str(item) + " " + str(stru.calc.results['energy']) + " >> ../GAlog.txt")
+
+    def record_stru_info(self, stru, now_cluster):
+        path_cluster = os.path.join(self.conf.home_path, 'Cluster' + str(now_cluster))
+        list_for_comm = self.log.rank_each_cluster[now_cluster]
+
+        stru_path = list()
+        for item in stru.info['Parent']:
+            path = os.path.join(path_cluster, "Gen" + str(int(list_for_comm[item][0])),
+                                str(int(list_for_comm[item][1])), "CONTCAR")
+            stru_path.append(path)
+
+        stru.info['Parent'] = stru_path
+        tf = open("info.json", "w")
+        json.dump(stru.info, tf, indent=4, separators=(',', ':'))
+        tf.close()
 
     def run(self):
         if self.conf.cluster_mode == 'Single':  # TODO
@@ -243,19 +283,28 @@ class FollowingGen(OffspringOperation):
 
         elif self.conf.cluster_mode == 'Multi':
             for now_cluster in range(self.conf.num_cluster):
-                iter_list = range(self.conf.num_pop * self.conf.samp_ratio)
-                print(iter_list)
-                self.parallel_frame(self.random_ope_sampling, iter_list, now_cluster=now_cluster, mode='sampling')
+                path_gen = os.path.join(self.conf.home_path, 'Cluster' + str(now_cluster), 'Gen' + str(self.gen))
+                self.iter_list = list(range(self.conf.num_pop))
+                self.iter_list = restart_confirm(path_gen, self.iter_list)
 
-                exchange(self.gen, now_cluster, self.conf, self.log)
+                if len(self.iter_list) == 0:
+                    continue
 
-        self.log.create_log_each_gen()
+                if 0 in self.iter_list:
+                    exchange(self.gen, now_cluster, self.conf, self.log)
+                    self.iter_list.remove(0)
 
-        self.log.log_msg += f'Calculation at Gen {self.gen} Finished'
-        self.log.save_log()
+                samp_list = range(len(self.iter_list) * self.conf.samp_ratio)
+                self.parallel_frame(self.random_ope_sampling, samp_list, now_cluster=now_cluster, mode='sampling')
+
+                self.samp.update(now_cluster)  # Update training dataset before sampling for next generation.
+                self.for_calc_list = self.samp.sample(self.candidate_list, len(self.iter_list), now_cluster=now_cluster)
+                self.offspring_mode(self.parallel_offspring, now_cluster)
+
+        self.samp.error_stat(self.conf, self.log, self.gen)
+        self.log.create_log_each_gen(gen=self.gen)
 
 
-############## utilities #############################
 
 class OperationSelector(object):
     """Class used to randomly select a procreation operation
@@ -284,7 +333,7 @@ class OperationSelector(object):
     def get_operator(self):
         """Choose operator and return it."""
         to_use = self.__get_index__()
-        return self.oplist[to_use], to_use
+        return self.oplist[to_use]
 
 
 def box_generator(atoms, top_num, blmin, label, height_ratio):
@@ -320,7 +369,7 @@ def cal_height_gap(atoms, label, blmin):
             return tmp[0] - tmp[i]
 
 
-def restart_cofirm(path_gen, iter_list, log):
+def restart_confirm(path_gen, iter_list):
     if not os.path.exists(path_gen):
         os.makedirs(path_gen)
     else:
@@ -333,8 +382,8 @@ def restart_cofirm(path_gen, iter_list, log):
         for i in list(set(previous_cal_list)):
             iter_list.remove(i)
 
-        log.log_msg += f" -  - Restart: Cluster {now_cluster} " \
-                       f"Already Calculate {len(previous_cal_list)} Structures \n \n"
+        print(f"Restart: This Cluster Already Calculate {len(previous_cal_list)} Structures")
+
     return iter_list
 
 
@@ -344,7 +393,7 @@ def return_parent_number(log_set, conf, now_cluster, num=2,
 
     random_list = list(range(conf.num_fit))
     parent_array = np.zeros(num, dtype=np.int64)
-    list_for_comm = log_set.gen_loclist_with_cluster[now_cluster]
+    list_for_comm = log_set.rank_each_cluster[now_cluster]
     list_fitness = cal_fitness(list_for_comm, conf.num_fit)
 
     for i in range(len(parent_array)):
@@ -426,6 +475,7 @@ def crossover(pos_p1, pos_p2, slab_pos, num_elem_atom, maxcount=100):
 
 
 def de_rand_1(log_set, conf, now_cluster, parent_de_list):
+    final = None
     return_stru_list = return_parent_number(log_set, conf, now_cluster, num=3, return_stru=True)
     num_1, stru_1 = return_stru_list[0][0], return_stru_list[0][1]
     top_1 = stru_1[:conf.num_atom]
@@ -440,10 +490,13 @@ def de_rand_1(log_set, conf, now_cluster, parent_de_list):
         v_donor = top_3.get_positions() + (random.randint(1, 50) / 100) * x_diff
         top_3.set_positions(v_donor)
         final = top_3 + stru_3[conf.num_atom:]
+
     return final, parent, 'de_rand_1'
 
 
 def de_best_1(log_set, conf, now_cluster, parent_de_list):
+    final = None
+
     return_stru_list = return_parent_number(log_set, conf, now_cluster, num=3,
                                             return_stru=True, return_best_stru=True)
     num_best, stru_best = return_stru_list[0][0], return_stru_list[0][1]
@@ -460,10 +513,13 @@ def de_best_1(log_set, conf, now_cluster, parent_de_list):
         v_donor = top_best.get_positions() + (random.randint(1, 50) / 100) * x_diff
         top_best.set_positions(v_donor)
         final = top_best + stru_best[conf.num_atom:]
+
     return final, parent, 'de_best_1'
 
 
 def de_rand_to_best_1(log_set, conf, now_cluster, parent_de_list):
+    final = None
+
     return_stru_list = return_parent_number(log_set, conf, now_cluster, num=4,
                                             return_stru=True, return_best_stru=True)
 
@@ -485,4 +541,5 @@ def de_rand_to_best_1(log_set, conf, now_cluster, parent_de_list):
             random.randint(1, 20) / 100) * x_diff_2
         top_best.set_positions(v_donor)
         final = top_best + stru_best[conf.num_atom:]
+
     return final, parent, 'de_rand_to_best_1'

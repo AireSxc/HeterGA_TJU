@@ -7,7 +7,7 @@ import yaml
 from ase.calculators.calculator import Calculator
 
 from geometry_check import closest_distances_generator
-from utilities import elem_atom_generator
+from utilities import elem_atom_generator, rearrange_order
 
 
 class ReadSetandCalc:
@@ -17,6 +17,7 @@ class ReadSetandCalc:
 
         # Whole Program setting
         self.home_path = os.getcwd()
+        self.model_save_file = 'features_ene_pri.npz'
 
         try:
             conf['adsorp_atom']
@@ -53,14 +54,21 @@ class ReadSetandCalc:
 
         self.top_num = conf['top_num_atom_for_optima']
         self.num_elem_atom_min = elem_atom_generator(self.stru_min, conf['top_num_atom_for_optima'])
+        self.num_atom_min = sum(self.num_elem_atom_min)
 
         self.num_elem_atom = [i * reduce(lambda x, y: x * y, self.supercell_num) for i in self.num_elem_atom_min]
         self.num_atom = sum(self.num_elem_atom)
+
+        top = rearrange_order(self.stru_min[:self.num_atom_min] * self.supercell_num)
+        down = self.stru_min[self.num_atom_min:] * self.supercell_num
+        self.stru = top + down
 
         self.height_ratio = conf['height_ratio']
 
         self.delete_num = conf['delete_num']  # TODO LIST
         self.initial_mode = conf['initial_mode']
+
+        self.gen = 0
 
         # Sampling
 
@@ -68,8 +76,6 @@ class ReadSetandCalc:
         self.samp_ratio = conf['sampling_ratio']
 
         # Following generation
-
-        self.slab = None
 
         try:
             conf['mutate_rate']
@@ -81,4 +87,4 @@ class ReadSetandCalc:
         self.num_pop = conf['num_pop']
 
     def follow_initial(self):
-        self.slab = ase.io.read(os.path.join(self.home_path, 'Cluster0', 'Gen0', '0', 'CONTCAR'))
+        self.stru = ase.io.read(os.path.join(self.home_path, 'Cluster0', 'Gen0', '0', 'CONTCAR'))

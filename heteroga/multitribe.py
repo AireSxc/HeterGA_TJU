@@ -11,11 +11,17 @@ def exchange(gen, now_cluster, conf, log_set, mode='roulette_choose'):
     path_cluster = os.path.join(conf.home_path, 'Cluster' + str(now_cluster))
     path_gen = os.path.join(path_cluster, "Gen" + str(gen))
 
-    if mode == 'roulette_choose': # TODO: choose_best
+    terminal_path = os.path.join(path_gen, '0')
+    if not os.path.exists(terminal_path):
+        os.makedirs(terminal_path)
+    else:
+        exit()
+
+    if mode == 'roulette_choose':  # TODO: choose_best
         random_list = list(range(conf.num_cluster))
         random_list.remove(now_cluster)
         target_cluster = random.choice(random_list)
-        list_for_comm = log_set.gen_loclist_with_cluster[target_cluster]
+        list_for_comm = log_set.rank_each_cluster[target_cluster]
         fit_comm = cal_fitness(list_for_comm, conf.num_fit)
 
         p0 = None
@@ -28,10 +34,6 @@ def exchange(gen, now_cluster, conf, log_set, mode='roulette_choose'):
                                "Gen" + str(int(list_for_comm[p0][0])), str(int(list_for_comm[p0][1])))
     target_energy = list_for_comm[p0][2]
 
-    terminal_path = os.path.join(path_gen, '0')
-    if not os.path.exists(terminal_path):
-        os.makedirs(terminal_path)
-
     f_list = os.listdir(target_path)
 
     target_file = None
@@ -39,6 +41,7 @@ def exchange(gen, now_cluster, conf, log_set, mode='roulette_choose'):
         if os.path.splitext(item)[1] == '.cif':
             target_file = item
 
+    shutil.copy(os.path.join(target_path, 'input.arc'), terminal_path)
     shutil.copy(os.path.join(target_path, target_file), terminal_path)
     shutil.copy(os.path.join(target_path, 'CONTCAR'), terminal_path)
 

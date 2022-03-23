@@ -3,8 +3,8 @@ import shutil
 import subprocess
 
 import ase.io
-from ase.calculators import calculator
 from ase.calculators.calculator import Calculator
+
 
 class LaspCalculator(Calculator):
     implemented_properties = ['energy']
@@ -45,45 +45,41 @@ class LaspCalculator(Calculator):
 
         self.write_input(atoms)
 
-        self._run(command=self.lasp_command,
-                  directory=self.directory)
+        self.run()
 
-        lasp_error = self.update_atoms()
-
-        if lasp_error:
-            raise ValueError('Input Structure Cause Problem in {}'
-                             .format(os.path.abspath(self.directory)))
-
-        self.read_energy()
+        self.update_atoms_and_energy()
 
         if self.clear_output:
             self._clear_output()
 
-    # Methods for reading information from LASP output files:
-    def read_energy(self):
-        """Method to read energy from best.arc file."""
-        with open('best.arc', 'r') as x:
-            energy_line = x.readlines()[2]
-            energy = energy_line.split()[3]
-        self.results['energy'] = energy
-
-    def update_atoms(self):
+    def update_atoms_and_energy(self):
         """Update the atoms object with new positions and cell"""
-        try:
-            self.atoms = ase.io.read('best.arc', format='dmol-arc')
-        except StopIteration:
-            lasp_error = True
-            return lasp_error
+        if os.path.exists('ExceedSym.arc'):
+            raise ValueError('Input Structure Cause Problem in {}'.format(os.path.abspath(self.directory)))
+        else:
+            try:
+                self.atoms = ase.io.read('best.arc', format='dmol-arc')
+                with open('best.arc', 'r') as x:
+                    energy_line = x.readlines()[2]
+                    energy = energy_line.split()[3]
+            except StopIteration:
+                self.atoms = ase.io.read('all.arc', format='dmol-arc')
+                with open('all.arc', 'r') as x:
+                    energy_line = x.readlines()[2]
+                    energy = energy_line.split()[3]
+
+            self.results['energy'] = energy
 
     def write_input(self, atoms):
         ase.io.write('input.arc', atoms, format='dmol-arc')
         shutil.copy(self.lasp_in, os.getcwd())
         shutil.copy(self.pot_file, os.getcwd())
 
-    def _run(self, command=None, out=None, directory=None):
+    def run(self, command=None, out=None, directory=None):
         """Method to explicitly execute LASP"""
         if command is None:
-            command = self.command
+            command = self.lasp_command
+
         if directory is None:
             directory = self.directory
 
