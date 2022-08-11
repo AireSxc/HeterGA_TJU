@@ -7,8 +7,9 @@ from ase.ga.utilities import get_rotation_matrix, gather_atoms_by_tag
 
 from geometry_check import atoms_too_close, atoms_too_close_two_sets
 
+mc = 500
 
-def rattle(old_atoms, blmin, num_atom, rattle_strength=0.8, rattle_prop=0.4, test_dist_to_slab=True, use_tags=False):
+def rattle(old_atoms, blmin, num_atom, maxcount=mc, rattle_strength=0.8, rattle_prop=0.4, test_dist_to_slab=True, use_tags=False):
     """ Does the actual mutation. """
     n = len(old_atoms) if num_atom is None else num_atom
     atoms = old_atoms[:n]
@@ -21,7 +22,6 @@ def rattle(old_atoms, blmin, num_atom, rattle_strength=0.8, rattle_prop=0.4, tes
     st = 2. * rattle_strength
 
     count = 0
-    maxcount = 200
     too_close = True; mutant = None
     while too_close and count < maxcount:
         count += 1
@@ -45,13 +45,12 @@ def rattle(old_atoms, blmin, num_atom, rattle_strength=0.8, rattle_prop=0.4, tes
         mutant = top + slab
 
     if count == maxcount:
-        return None
+        return None, rattle.__name__
 
-    mutant.mutate_info = 'rattle'
-    return mutant
+    return mutant, rattle.__name__
 
 
-def permutation(old_atoms, blmin, num_atom, probability=0.33, test_dist_to_slab=True, use_tags=False):
+def permutation(old_atoms, blmin, num_atom, maxcount=mc, probability=0.4, test_dist_to_slab=True, use_tags=False):
     """ Does the actual mutation. """
     n = len(old_atoms) if num_atom is None else num_atom
     atoms = old_atoms[:n]
@@ -79,7 +78,6 @@ def permutation(old_atoms, blmin, num_atom, probability=0.33, test_dist_to_slab=
         'Permutations with one atom (or molecule) type is not valid'
 
     count = 0
-    maxcount = 200
     too_close = True; mutant = None
     while too_close and count < maxcount:
         count += 1
@@ -106,13 +104,12 @@ def permutation(old_atoms, blmin, num_atom, probability=0.33, test_dist_to_slab=
         mutant = top + slab
 
     if count == maxcount:
-        return None
+        return None, permutation.__name__
 
-    mutant.mutate_info = 'permutation'
-    return mutant
+    return mutant, permutation.__name__
 
 
-def mirror(old_atoms, blmin, num_atom, reflect=False):
+def mirror(old_atoms, blmin, num_atom, n_tries=mc, reflect=False):
     """ Do the mutation of the atoms input. """
 
     tc = True; tot = None
@@ -124,7 +121,6 @@ def mirror(old_atoms, blmin, num_atom, reflect=False):
     for u in unique_types:
         nu[u] = sum(num == u)
 
-    n_tries = 200
     counter = 0
     changed = False
 
@@ -211,11 +207,12 @@ def mirror(old_atoms, blmin, num_atom, reflect=False):
             changed = True
         tot = cand + slab
     if counter == n_tries:
-        return None
-    return tot
+        return None, mirror.__name__
+
+    return tot, mirror.__name__
 
 
-def rotate(atoms, blmin, n_top=None, fraction=0.33, min_angle=1.57, test_dist_to_slab=True, rng=np.random):
+def rotate(atoms, blmin, n_top=None, maxcount=mc, fraction=0.33, min_angle=1.57, test_dist_to_slab=True, rng=np.random):
     """Does the actual mutation."""
     n = len(atoms) if n_top is None else n_top
     slab = atoms[:len(atoms) - n]
@@ -238,7 +235,6 @@ def rotate(atoms, blmin, n_top=None, fraction=0.33, min_angle=1.57, test_dist_to
 
     too_close = True
     count = 0
-    maxcount = 10000
     while too_close and count < maxcount:
         newpos = np.copy(pos)
         for tag in chosen_tags:
@@ -272,11 +268,11 @@ def rotate(atoms, blmin, n_top=None, fraction=0.33, min_angle=1.57, test_dist_to
             too_close = atoms_too_close_two_sets(slab, mutant, blmin)
 
     if count == maxcount:
-        mutant = None
+        return None, rotate.__name__
     else:
         mutant = slab + mutant
 
-    return mutant
+    return mutant, rotate.__name__
 
 
 

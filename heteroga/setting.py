@@ -5,19 +5,36 @@ import ase.io
 import numpy as np
 import yaml
 from ase.calculators.calculator import Calculator
+from ase.ga.utilities import closest_distances_generator
 
-from geometry_check import closest_distances_generator
 from utilities import elem_atom_generator, rearrange_order
 
-
 class ReadSetandCalc:
-    def __init__(self, file='config.yaml', calc=None):
+    def __init__(self,
+                 file='config.yaml',
+                 calc=None):
 
         conf = yaml.load(open(file, 'r'), Loader=yaml.FullLoader)
 
         # Whole Program setting
+
+        try:
+            conf['ene_shield']
+        except KeyError:
+            self.ene_shield = float("-inf")
+        else:
+            self.ene_shield = conf['ene_shield']
+
+        try:
+            conf['logfile']
+        except KeyError:
+            self.logfile = 'search.log'
+        else:
+            self.logfile = conf['logfile']
+
         self.home_path = os.getcwd()
-        self.model_save_file = 'features_ene_pri.npz'
+        self.data_save_file = 'features_ene.pkl'
+        self.model_save_file = 'model.pth'
 
         try:
             conf['adsorp_atom']
@@ -32,7 +49,7 @@ class ReadSetandCalc:
         self.stru_min = self.stru_min[np.argsort(-self.stru_min.get_positions()[..., 2])]
 
         all_atom_types = list(set(self.stru_min.numbers))
-        self.blmin = closest_distances_generator(self.adsorp_atom, all_atom_types, ratio_of_covalent_radii=0.7)
+        self.blmin = closest_distances_generator(all_atom_types, ratio_of_covalent_radii=0.7)
 
         assert conf['num_cluster'] > 0
         if conf['num_cluster'] == 1:
@@ -86,5 +103,32 @@ class ReadSetandCalc:
 
         self.num_pop = conf['num_pop']
 
+        try:
+            conf['ga_de_ratio']
+        except KeyError:
+            self.ga_de_ratio = 1
+        else:
+            self.ga_de_ratio = conf['ga_de_ratio']
+
+        self.ml_interval = conf['ml_interval']
+        self.e_pt = -379.70
+
+        try:
+            conf['ene_shield']
+        except KeyError:
+            self.ene_shield = 0.92
+        else:
+            self.ene_shield = conf['ene_shield']
+
+        self.training_iter = conf['training_iter']
+
+        try:
+            conf['max_data_size']
+        except KeyError:
+            self.max_data_size = 2500
+        else:
+            self.max_data_size = conf['max_data_size']
+
     def follow_initial(self):
         self.stru = ase.io.read(os.path.join(self.home_path, 'Cluster0', 'Gen0', '0', 'CONTCAR'))
+

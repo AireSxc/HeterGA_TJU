@@ -7,6 +7,7 @@ from log import cal_fitness
 
 
 def exchange(gen, now_cluster, conf, log_set, mode='roulette_choose'):
+    print(gen)
 
     path_cluster = os.path.join(conf.home_path, 'Cluster' + str(now_cluster))
     path_gen = os.path.join(path_cluster, "Gen" + str(gen))
@@ -22,11 +23,15 @@ def exchange(gen, now_cluster, conf, log_set, mode='roulette_choose'):
         random_list.remove(now_cluster)
         target_cluster = random.choice(random_list)
         list_for_comm = log_set.rank_each_cluster[target_cluster]
-        fit_comm = cal_fitness(list_for_comm, conf.num_fit)
+        print(list_for_comm)
 
+        fit_comm = cal_fitness(list_for_comm, conf.num_fit)
+        print(fit_comm)
+        print(int(math.ceil(conf.num_fit * 0.3)))
         p0 = None
         while p0 is None:
-            p_t = random.randrange(0, int(math.ceil(conf.num_fit * 0.3))) if gen == 1 else random.randrange(1, conf.num_fit)
+            p_t = random.randrange(0, int(math.ceil(conf.num_fit * 0.2)))
+            print(p_t)
             if random.randrange(0, 10000) / 10000.0 < fit_comm[p_t]:
                 p0 = p_t
 

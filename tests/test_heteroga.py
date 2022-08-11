@@ -7,7 +7,7 @@
 import unittest
 from click.testing import CliRunner
 
-from heteroga import heteroga
+from heteroga import opt
 from heteroga import cli
 
 

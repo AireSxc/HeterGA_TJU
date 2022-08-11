@@ -15,32 +15,39 @@ def log_similarity(file_list, path_clu, conf):
     file_list = sorted(file_list, key=(lambda x: x[2]), reverse=True)
 
     for i in range(len(file_list)):
-        path1 = os.path.join(path_clu, "Gen" + str(int(file_list[i][0])), str(int(file_list[i][1])), "CONTCAR")
-        a1_stru = ase.io.read(path1, format='vasp')[:conf.num_atom]
-        a1 = [a1_stru, file_list[i][2]]
+        path1 = os.path.join(path_clu, f"Gen{int(file_list[i][0])}", str(int(file_list[i][1])), "CONTCAR")
+        a1_stru = ase.io.read(path1, format='vasp')
+        a1 = a1_stru[np.argsort(-a1_stru.get_positions()[..., 2])][:conf.num_atom]
+        a1 = [a1, file_list[i][2]]
 
         for j in range(i):
-            path2 = os.path.join(path_clu, "Gen" + str(int(file_list[j][0])), str(int(file_list[j][1])), "CONTCAR")
-            a2_stru = ase.io.read(path2, format='vasp')[:conf.num_atom]
-            a2 = [a2_stru, file_list[j][2]]
-            similarity = looks_like(a1, a2, conf.num_atom)
+            path2 = os.path.join(path_clu, f"Gen{int(file_list[j][0])}", str(int(file_list[j][1])), "CONTCAR")
+            a2_stru = ase.io.read(path2, format='vasp')
+            a2 = a2_stru[np.argsort(-a2_stru.get_positions()[..., 2])][:conf.num_atom]
+            a2 = [a2, file_list[j][2]]
 
-            if similarity:
-                drop_list.append(j)
+            try:
+                similarity = looks_like(a1, a2, measure_energies=True)
+                if similarity:
+                    drop_list.append(j)
+            except AssertionError:
+                print('Two structure have problem')
+                ase.io.write(os.path.join(conf.home_path, 'POSCAR_a1'), a1_stru)
+                ase.io.write(os.path.join(conf.home_path, 'POSCAR_a2'), a2_stru)
 
     for i in set(drop_list):
         file_list[i][2] = file_list[i][2] + 10
 
     return file_list, drop_list
 
-def sampling_similar(new_stru, conf, log_set, now_cluster, pair_cor_cum_diff=0.05):
+def sampling_similar(new_stru, conf, log_set, now_cluster):
     path_cluster = os.path.join(conf.home_path, 'Cluster' + str(now_cluster))
     list_for_comm = log_set.rank_each_cluster[now_cluster]
 
     for stru_num in list_for_comm:
         path = os.path.join(path_cluster, "Gen" + str(int(stru_num[0])), str(int(stru_num[1])), "CONTCAR")
         a2 = ase.io.read(path, format='vasp')
-        similarity = looks_like([new_stru], [a2], conf.num_atom, pair_cor_cum_diff=pair_cor_cum_diff)
+        similarity = looks_like([new_stru], [a2], conf.num_atom)
         if similarity:
             return True
 
@@ -139,16 +146,18 @@ def cum_diff(a1, a2):
     return total_cum_diff
 
 
-def looks_like(a1, a2, num_atom, delta_de=0.2, pair_cor_cum_diff=0.05, measure_energies=False):
+def looks_like(a1, a2, delta_de=0.1, pair_cor_cum_diff=0.03, measure_energies=False):
     """ Return if structure a1 or a2 are similar or not. """
-    if measure_energies: # TODO: detect is the input is correct.
+    if measure_energies:
+        assert len(a1) == 2 and len(a2) == 2, "No energies information but require measure_energies"
     # first we check the energy criteria
         de = abs(a1[1] - a2[1])
         if de >= delta_de:
             return False
 
     # then we check the structure
-    total_cum_diff = cum_diff(a1[0][:num_atom], a2[0][:num_atom])
+    print(len(a1[0]), len(a2[0]))
+    total_cum_diff = cum_diff(a1[0], a2[0])
 
     return total_cum_diff < pair_cor_cum_diff
 

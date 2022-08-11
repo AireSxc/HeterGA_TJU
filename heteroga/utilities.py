@@ -119,3 +119,43 @@ class OperationSelector():
                 anew = parents[0]
                 anew = op_list[to_use].finalize(anew, successfull=False)
         return anew
+
+class EarlyStopping:
+    """Early stops the training if validation loss doesn't improve after a given patience.
+    https://github.com/Bjarten/early-stopping-pytorch/blob/master/pytorchtools.py"""
+    def __init__(self, catastrophe_patience=7, end_patience=15, delta=0, trace_func=print):
+        """
+        Args:
+            delta (float): Minimum change in the monitored quantity to qualify as an improvement.
+                            Default: 0
+            trace_func (function): trace print function.
+                            Default: print
+        """
+        assert catastrophe_patience < end_patience , "catastrophe_patience should be lower than end_patience"
+
+        self.catastrophe_patience = catastrophe_patience
+        self.end_patience = end_patience
+        self.counter = 0
+        self.best_score = None
+        self.early_catastrophe = False
+        self.early_end = False
+        self.delta = delta
+        self.trace_func = trace_func
+
+    def __call__(self, target_val):
+
+        score = -target_val
+        if self.best_score is None:
+            self.best_score = score
+
+        elif score == self.best_score + self.delta:
+            self.counter += 1
+            self.trace_func(f'EarlyStopping counter: {self.counter} out of {self.end_patience}')
+            if self.counter == self.catastrophe_patience:
+                self.early_catastrophe = True
+            if self.counter >= self.end_patience:
+                self.early_end = True
+        else:
+            self.best_score = score
+            self.counter = 0
+            self.early_catastrophe = False

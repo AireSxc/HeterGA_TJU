@@ -3,8 +3,8 @@ import shutil
 import subprocess
 
 import ase.io
+import numpy as np
 from ase.calculators.calculator import Calculator
-
 
 class LaspCalculator(Calculator):
     implemented_properties = ['energy']
@@ -37,6 +37,8 @@ class LaspCalculator(Calculator):
             self.pot_file = pot_file
 
         self.clear_output = clear_output
+        self.delete_list = ['all.arc', 'allfor.arc', 'allkeys.log', 'allstr.arc',
+                            'Badstr.arc', 'lasp.in', 'lasp.out', 'SSWtraj']
 
     def calculate(self,
                   atoms=None,
@@ -86,11 +88,48 @@ class LaspCalculator(Calculator):
         subprocess.call(command, shell=True, stdout=out, cwd=directory)
 
     def _clear_output(self):
-        delete_list = ['all.arc', 'allfor.arc', 'allkeys.log', 'allstr.arc',
-                       'Badstr.arc', 'lasp.in', 'lasp.out', 'SSWtraj']
-
         file_list = os.listdir(self.directory)
 
         for item in file_list:
-            if item in delete_list or (item.endswith(".pot")):
+            if item in self.delete_list or (item.endswith(".pot")):
                 os.remove(item)
+
+
+class LaspVaspCalculator(LaspCalculator):
+    implemented_properties = ['energy']
+    default_parameters = {}
+
+    def __init__(self,
+                 vasp_calc=None,
+                 extra_pcs=None,
+                 vasp_cmd=None,
+                 **kwargs):
+
+        LaspCalculator.__init__(self, **kwargs)
+
+        self.vasp_calc = vasp_calc
+        self.extra_pcs = extra_pcs
+        self.vasp_cmd = vasp_cmd
+        self.delete_list = ['all.arc', 'allfor.arc', 'allkeys.log', 'allstr.arc',
+                            'Badstr.arc', 'lasp.in', 'lasp.out', 'SSWtraj',
+                            'REPORT', 'CHGCAR', 'CHG', 'DOSCAR', 'EIGENVAL', 'IBZKPT', 'PCDAT', 'PROCAR',
+                            'WAVECAR', 'XDATCAR', 'vasprun.xml', 'FORCECAR']
+
+    def update_atoms_and_energy(self):
+        """Update the atoms object with new positions and cell"""
+        if os.path.exists('ExceedSym.arc'):
+            raise ValueError('Input Structure Cause Problem in {}'.format(os.path.abspath(self.directory)))
+        else:
+            try:
+                self.atoms = ase.io.read('best.arc', format='dmol-arc')
+            except StopIteration:
+                self.atoms = ase.io.read('all.arc', format='dmol-arc')
+
+        vasp_atom = self.extra_pcs(self.atoms)
+        vasp_atom = vasp_atom[np.argsort(-vasp_atom.get_positions()[..., 2])]
+        self.vasp_calc.write_input(vasp_atom)
+
+        subprocess.call(self.vasp_cmd, shell=True, stdout=subprocess.DEVNULL)
+
+        energy_free, energy_zero = self.vasp_calc.read_energy()
+        self.results['energy'] = energy_zero

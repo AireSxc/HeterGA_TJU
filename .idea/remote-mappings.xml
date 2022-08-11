@@ -4,6 +4,13 @@
     <list>
       <list>
         <remote-mappings server-id="python@7ba613c7-4c59-48b3-a864-16416e5c8662" />
+        <remote-mappings server-id="python@sftp://shixc@nd2.zhaotju.com:19122/data/home/shixc/anaconda3/envs/mltest/bin/python">
+          <settings>
+            <list>
+              <mapping local-root="$PROJECT_DIR$" remote-root="/data/home/shixc/TJU_HeteroGA" />
+            </list>
+          </settings>
+        </remote-mappings>
       </list>
     </list>
   </component>
